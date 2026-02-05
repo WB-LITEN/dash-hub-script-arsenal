@@ -26,7 +26,9 @@ local states = {
     isTPKeyDown = false, spinSpeed = 30,
     aimStrength = 0.15, aimFOV = 150,
     espColor = Color3.fromRGB(0, 170, 255),
-    lang = "PT", triggerDebounce = false
+    lang = "PT", triggerDebounce = false,
+    -- ADICIONADOS:
+    fly = false, infAmmo = false, instantReload = false, flySpeed = 50
 }
 
 -- FIX: Configurações do Círculo
@@ -216,6 +218,11 @@ createToggle("Soft Aim Assist", 0, aimF, "aim")
 createToggle("Trigger Bot", 45, aimF, "trigger")
 createToggle("No Recoil (Universal)", 90, aimF, "norecoil")
 
+-- ADICIONADOS NA ABA AIM BOT:
+createToggle("Fly (W,S,A,D)", 345, aimF, "fly")
+createToggle("Infinite Ammo", 390, aimF, "infAmmo")
+createToggle("Instant Reload", 435, aimF, "instantReload")
+
 local tpBtn = Instance.new("TextButton", aimF)
 tpBtn.Size = UDim2.new(1, 0, 0, 40); tpBtn.Position = UDim2.fromOffset(0, 135); tpBtn.BackgroundColor3 = states.tpMagnet and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(150, 0, 255)
 tpBtn.Text = "🧲 SPIN MAGNET (HOLD E)"; tpBtn.TextColor3 = Color3.new(1,1,1); tpBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", tpBtn)
@@ -274,6 +281,35 @@ task.spawn(function()
     end
 end)
 
+-- LÓGICA EXTRA (FLY, AMMO, RELOAD)
+RunService.Stepped:Connect(function()
+    if states.fly and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
+        local hrp = lp.Character.HumanoidRootPart
+        local moveDir = Vector3.zero
+        if UIS:IsKeyDown(Enum.KeyCode.W) then moveDir = moveDir + Camera.CFrame.LookVector end
+        if UIS:IsKeyDown(Enum.KeyCode.S) then moveDir = moveDir - Camera.CFrame.LookVector end
+        if UIS:IsKeyDown(Enum.KeyCode.A) then moveDir = moveDir - Camera.CFrame.RightVector end
+        if UIS:IsKeyDown(Enum.KeyCode.D) then moveDir = moveDir + Camera.CFrame.RightVector end
+        hrp.Velocity = moveDir * states.flySpeed
+    end
+end)
+
+task.spawn(function()
+    while task.wait(0.1) do
+        pcall(function()
+            if states.infAmmo or states.instantReload then
+                local tool = lp.Character and lp.Character:FindFirstChildOfClass("Tool")
+                if tool then
+                    for _, v in ipairs(tool:GetDescendants()) do
+                        if states.infAmmo and (v.Name:find("Ammo") or v.Name:find("Clip")) then v.Value = 999 end
+                        if states.instantReload and (v.Name:find("Reload") or v.Name:find("Time")) then v.Value = 0 end
+                    end
+                end
+            end
+        end)
+    end
+end)
+
 local oldCamRotation = Camera.CFrame.Rotation
 local spinAngle = 0
 
@@ -285,7 +321,7 @@ RunService.RenderStepped:Connect(function()
     FOVCircle.Visible = (states.visible and states.showFOV)
     FOVCircle.Color = states.espColor
 
-    -- SPIN MAGNET FIX (GRUDADO + SEMPRE DE FRENTE + MIRA NA CABEÇA)
+    -- SPIN MAGNET FIX
     if states.tpMagnet and states.isTPKeyDown then
         local targetHead = getTarget(true)
         if targetHead then
@@ -293,20 +329,13 @@ RunService.RenderStepped:Connect(function()
                 local char = lp.Character
                 local hrp = char and char:FindFirstChild("HumanoidRootPart")
                 local targetHRP = targetHead.Parent:FindFirstChild("HumanoidRootPart")
-                
                 if hrp and targetHRP then
                     spinAngle = spinAngle + states.spinSpeed
-                    
-                    -- Calcula a posição ao redor do inimigo (3 studs de distância)
                     local angleRad = math.rad(spinAngle)
                     local offset = Vector3.new(math.cos(angleRad) * 3, 1.5, math.sin(angleRad) * 3)
                     local finalPos = targetHRP.Position + offset
-                    
-                    -- Faz o seu personagem sempre olhar para a cabeça do inimigo
                     hrp.CFrame = CFrame.lookAt(finalPos, targetHead.Position)
                     hrp.Velocity = Vector3.zero
-                    
-                    -- Trava a Câmera na cabeça do inimigo enquanto teleporta
                     Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetHead.Position)
                 end
             end)
