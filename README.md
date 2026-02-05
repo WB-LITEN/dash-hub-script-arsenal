@@ -1,4 +1,4 @@
--- DASH HUB BETA V18.0 (FIXED BACKSTAB MAGNET)
+-- DASH HUB BETA V18.2 (RE-RESTORED + FULL FIX)
 -- SHORTCUT: RIGHT SHIFT | [X] TO CLOSE
 
 local Players = game:GetService("Players")
@@ -11,38 +11,88 @@ local lp = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local pGui = lp:WaitForChild("PlayerGui")
 
+-- Cache de performance
+local WorldToViewportPoint = Camera.WorldToViewportPoint
+local GetPlayers = Players.GetPlayers
+local RaycastParamsNew = RaycastParams.new
+
+-- Limpa versões duplicadas para não bugar
 if pGui:FindFirstChild("DashHubBeta") then pGui.DashHubBeta:Destroy() end
 
 -- ================= CONFIGS & LANGS =================
 local states = { 
     showFOV = false, wallhack = false, aim = false, trigger = false, visible = true,
-    norecoil = false, tpMagnet = false,
+    norecoil = false, tpMagnet = false, 
+    isTPKeyDown = false, spinSpeed = 30,
     aimStrength = 0.15, aimFOV = 150,
     espColor = Color3.fromRGB(0, 170, 255),
-    lang = "EN", triggerDebounce = false
+    lang = "PT", triggerDebounce = false
 }
 
+-- FIX: Configurações do Círculo
 local FOVCircle = Drawing.new("Circle")
-FOVCircle.Thickness = 1
+FOVCircle.Thickness = 2 
 FOVCircle.Color = Color3.new(1, 1, 1)
-FOVCircle.Transparency = 0.7
+FOVCircle.Transparency = 1 
 FOVCircle.Visible = false
+FOVCircle.Filled = false
 
 local langData = {
-    PT = {home="🏠 INÍCIO", aim="🎯 MIRA", esp="👁️ VISUAL", conf="⚙️ CONFIG", user="USUÁRIO", help="[RightShift] Minimizar / [X] Fechar", fps="LIMPAR MAPA (FPS)"},
-    EN = {home="🏠 HOME", aim="🎯 AIM BOT", esp="👁️ ESP", conf="⚙️ CONFIG", user="USER", help="[RightShift] Minimize / [X] Close", fps="FPS BOOSTER"},
+    PT = {home="🏠 INÍCIO", aim="🎯 MIRA", esp="👁️ VISUAL", conf="⚙️ CONFIG", user="USUÁRIO", help="[RightShift] Minimizar / [X] Fechar / [E] TP Spin", fps="LIMPAR MAPA (FPS)"},
+    EN = {home="🏠 HOME", aim="🎯 AIM BOT", esp="👁️ ESP", conf="⚙️ CONFIG", user="USER", help="[RightShift] Minimize / [X] Close / [E] TP Spin", fps="FPS BOOSTER"},
     ES = {home="🏠 INICIO", aim="🎯 AIM BOT", esp="👁️ ESP", conf="⚙️ AJUSTES", user="USUARIO", help="[RightShift] Minimizar / [X] Cerrar", fps="OPTIMIZAR"},
     FR = {home="🏠 ACCUEIL", aim="🎯 AIM BOT", esp="👁️ ESP", conf="⚙️ REGLAGES", user="JOUEUR", help="[RightShift] Réduire / [X] Fermer", fps="BOOSTER FPS"},
     DE = {home="🏠 START", aim="🎯 AIM BOT", esp="👁️ ESP", conf="⚙️ EINSTELL", user="SPIELER", help="[RightShift] Minimieren / [X] Schließen", fps="FPS BOOST"}
 }
 
--- ================= GUI BASE =================
-local gui = Instance.new("ScreenGui", pGui)
-gui.Name = "DashHubBeta"; gui.ResetOnSpawn = false
+-- ================= LOGIC FUNCTIONS =================
+
+local function isVisible(part)
+    local char = lp.Character
+    if not char then return false end
+    local params = RaycastParamsNew()
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.FilterDescendantsInstances = {char, part.Parent}
+    local result = workspace:Raycast(Camera.CFrame.Position, part.Position - Camera.CFrame.Position, params)
+    return result == nil
+end
+
+local function getTarget(ignoreWalls)
+    local target, shortestDist = nil, states.aimFOV
+    local mousePos = UIS:GetMouseLocation()
+    for _, p in ipairs(GetPlayers(Players)) do
+        if p ~= lp and p.Team ~= lp.Team and p.Character then
+            local head = p.Character:FindFirstChild("Head")
+            if head then
+                local pos, on = WorldToViewportPoint(Camera, head.Position)
+                if on or ignoreWalls then
+                    local mag = (Vector2.new(pos.X, pos.Y) - mousePos).Magnitude
+                    if mag < shortestDist then
+                        if ignoreWalls or isVisible(head) then
+                            target = head; shortestDist = mag
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return target
+end
+
+-- ================= GUI BASE (CORREÇÃO DE ABERTURA) =================
+local gui = Instance.new("ScreenGui")
+gui.Name = "DashHubBeta"
+gui.ResetOnSpawn = false
+gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+gui.Parent = pGui 
 
 local main = Instance.new("Frame", gui)
-main.Size = UDim2.fromOffset(480, 580); main.Position = UDim2.new(0.5, -240, 0.5, -290)
-main.BackgroundColor3 = Color3.fromRGB(15, 15, 22); main.Active = true; main.Draggable = true
+main.Size = UDim2.fromOffset(480, 580)
+main.Position = UDim2.new(0.5, -240, 0.5, -290)
+main.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
+main.Active = true
+main.Draggable = true
+main.Visible = true 
 Instance.new("UICorner", main)
 
 local stroke = Instance.new("UIStroke", main)
@@ -75,9 +125,11 @@ local homeF = createTab("HOME"); local aimF = createTab("AIM BOT"); local espF =
 local function createTabBtn(id, name, y)
     local btn = Instance.new("TextButton", sidebar)
     btn.Size = UDim2.new(1, -15, 0, 45); btn.Position = UDim2.fromOffset(7, y)
-    btn.BackgroundColor3 = Color3.fromRGB(25, 25, 35); btn.Text = name; btn.TextColor3 = Color3.new(1,1,1); btn.Font = Enum.Font.GothamBold; btn.TextSize = 12
+    btn.BackgroundColor3 = Color3.fromRGB(25, 25, 35); btn.Text = name; btn.TextColor3 = Color3.new(1,1,1); btn.Font = Enum.Font.GothamBold; btn.TextSize = 11
     Instance.new("UICorner", btn)
-    btn.MouseButton1Click:Connect(function() for k, v in pairs(frames) do v.Visible = (k == id) end end)
+    btn.MouseButton1Click:Connect(function() 
+        for k, v in pairs(frames) do v.Visible = (k == id) end 
+    end)
     tabButtons[id] = btn
 end
 
@@ -87,9 +139,9 @@ local info = Instance.new("TextLabel", homeF)
 info.Size = UDim2.new(1, 0, 1, 0); info.BackgroundColor3 = Color3.fromRGB(25, 25, 40); info.TextColor3 = Color3.new(1,1,1); info.Font = Enum.Font.GothamBold; info.TextSize = 14; info.RichText = true; info.TextYAlignment = Enum.TextYAlignment.Top; Instance.new("UICorner", info)
 
 task.spawn(function()
-    while task.wait(0.5) do
+    while task.wait(1) do
         if not gui.Parent then break end
-        local l = langData[states.lang]
+        local l = langData[states.lang] or langData.EN
         pcall(function()
             local ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
             local fps = math.floor(Stats.Workspace.Heartbeat:GetValue())
@@ -110,28 +162,12 @@ task.spawn(function()
     end
 end)
 
--- ================= LOGIC FUNCTIONS =================
-local function getTarget()
-    local target, shortestDist = nil, states.aimFOV
-    local mousePos = UIS:GetMouseLocation()
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p ~= lp and p.Team ~= lp.Team and p.Character and p.Character:FindFirstChild("Head") then
-            local pos, on = Camera:WorldToViewportPoint(p.Character.Head.Position)
-            if on then
-                local mag = (Vector2.new(pos.X, pos.Y) - mousePos).Magnitude
-                if mag < shortestDist then target = p.Character.Head; shortestDist = mag end
-            end
-        end
-    end
-    return target
-end
-
--- ================= TOOLS =================
+-- ================= TOOLS (TOGGLES & SLIDERS) =================
 local function createToggle(txt, y, parent, stateKey)
     local btn = Instance.new("TextButton", parent)
-    btn.Size = UDim2.new(1, 0, 0, 45); btn.Position = UDim2.fromOffset(0, y)
+    btn.Size = UDim2.new(1, 0, 0, 40); btn.Position = UDim2.fromOffset(0, y)
     btn.BackgroundColor3 = states[stateKey] and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(30, 30, 45)
-    btn.Text = (states[stateKey] and "🔵 " or "⚪ ") .. txt; btn.TextColor3 = Color3.new(1,1,1); btn.Font = Enum.Font.GothamBold; btn.TextSize = 13; Instance.new("UICorner", btn)
+    btn.Text = (states[stateKey] and "🔵 " or "⚪ ") .. txt; btn.TextColor3 = Color3.new(1,1,1); btn.Font = Enum.Font.GothamBold; btn.TextSize = 12; Instance.new("UICorner", btn)
     btn.MouseButton1Click:Connect(function()
         states[stateKey] = not states[stateKey]
         btn.Text = (states[stateKey] and "🔵 " or "⚪ ") .. txt
@@ -168,46 +204,59 @@ local fpsBtn = Instance.new("TextButton", confF)
 fpsBtn.Size = UDim2.new(1, 0, 0, 50); fpsBtn.Position = UDim2.fromOffset(0, 50); fpsBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100); fpsBtn.Text = "🚀 FPS BOOSTER (CLEAN MAP)"; fpsBtn.TextColor3 = Color3.new(1,1,1); fpsBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", fpsBtn)
 fpsBtn.MouseButton1Click:Connect(function()
     for _, v in ipairs(game:GetDescendants()) do
-        if v:IsA("BasePart") and not v:IsA("MeshPart") then v.Material = Enum.Material.SmoothPlastic
+        if v:IsA("BasePart") then v.Material = Enum.Material.SmoothPlastic
         elseif v:IsA("Decal") or v:IsA("Texture") then v:Destroy()
         elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then v.Enabled = false end
     end
-    Lighting.GlobalShadows = false; Lighting.FogEnd = 9e9; settings().Rendering.QualityLevel = 1
+    Lighting.GlobalShadows = false; settings().Rendering.QualityLevel = 1
 end)
 
 -- ABA AIM BOT
 createToggle("Soft Aim Assist", 0, aimF, "aim")
-createToggle("Trigger Bot", 50, aimF, "trigger")
-createToggle("No Recoil (Universal)", 100, aimF, "norecoil")
+createToggle("Trigger Bot", 45, aimF, "trigger")
+createToggle("No Recoil (Universal)", 90, aimF, "norecoil")
 
--- BOTÃO MAGNET ATUALIZADO
 local tpBtn = Instance.new("TextButton", aimF)
-tpBtn.Size = UDim2.new(1, 0, 0, 45); tpBtn.Position = UDim2.fromOffset(0, 150); tpBtn.BackgroundColor3 = states.tpMagnet and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(150, 0, 255)
-tpBtn.Text = states.tpMagnet and "🧲 BACKSTAB TP: ON" or "⚡ BACKSTAB TP: OFF"; tpBtn.TextColor3 = Color3.new(1,1,1); tpBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", tpBtn)
+tpBtn.Size = UDim2.new(1, 0, 0, 40); tpBtn.Position = UDim2.fromOffset(0, 135); tpBtn.BackgroundColor3 = states.tpMagnet and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(150, 0, 255)
+tpBtn.Text = "🧲 SPIN MAGNET (HOLD E)"; tpBtn.TextColor3 = Color3.new(1,1,1); tpBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", tpBtn)
 tpBtn.MouseButton1Click:Connect(function()
     states.tpMagnet = not states.tpMagnet
-    tpBtn.Text = states.tpMagnet and "🧲 BACKSTAB TP: ON" or "⚡ BACKSTAB TP: OFF"
     tpBtn.BackgroundColor3 = states.tpMagnet and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(150, 0, 255)
 end)
 
-createSlider("AIM STRENGTH", 205, states.aimStrength, 1, "aimStrength", aimF)
-createSlider("FOV SIZE", 265, states.aimFOV, 800, "aimFOV", aimF)
-createToggle("Show FOV Circle", 325, aimF, "showFOV")
+createSlider("AIM STRENGTH", 185, states.aimStrength, 1, "aimStrength", aimF)
+createSlider("FOV SIZE", 240, states.aimFOV, 800, "aimFOV", aimF)
+createToggle("Show FOV Circle", 300, aimF, "showFOV")
 
 -- ABA ESP
 createToggle("Enemy Wall Hack", 0, espF, "wallhack")
-local grid = Instance.new("Frame", espF); grid.Position = UDim2.fromOffset(0, 60); grid.Size = UDim2.new(1, 0, 0, 100); grid.BackgroundTransparency = 1
+local grid = Instance.new("Frame", espF); grid.Position = UDim2.fromOffset(0, 50); grid.Size = UDim2.new(1, 0, 0, 100); grid.BackgroundTransparency = 1
 Instance.new("UIGridLayout", grid).CellSize = UDim2.fromOffset(40, 40)
 for _, c in ipairs({Color3.new(0,0.7,1), Color3.new(1,0,0), Color3.new(0,1,0), Color3.new(1,1,0), Color3.new(1,1,1)}) do
     local b = Instance.new("TextButton", grid); b.BackgroundColor3 = c; b.Text = ""; Instance.new("UICorner", b)
     b.MouseButton1Click:Connect(function() states.espColor = c end)
 end
 
--- ================= SYSTEMS =================
+-- ================= SYSTEM LÓGICA =================
+
+UIS.InputBegan:Connect(function(i, g) 
+    if not g then
+        if i.KeyCode == Enum.KeyCode.RightShift then 
+            states.visible = not states.visible; main.Visible = states.visible
+        elseif i.KeyCode == Enum.KeyCode.E then 
+            states.isTPKeyDown = true
+        end
+    end
+end)
+
+UIS.InputEnded:Connect(function(i)
+    if i.KeyCode == Enum.KeyCode.E then states.isTPKeyDown = false end
+end)
+
+-- ESP SYSTEM
 task.spawn(function()
-    while task.wait(0.2) do
-        if not gui.Parent then break end
-        for _, p in ipairs(Players:GetPlayers()) do
+    while task.wait(0.5) do
+        for _, p in ipairs(GetPlayers(Players)) do
             if p ~= lp and p.Character then
                 local highlight = p.Character:FindFirstChild("DashHighlight")
                 if states.wallhack and p.Team ~= lp.Team then
@@ -217,7 +266,6 @@ task.spawn(function()
                     end
                     highlight.Enabled = true
                     highlight.FillColor = states.espColor
-                    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
                 else
                     if highlight then highlight.Enabled = false end
                 end
@@ -227,41 +275,61 @@ task.spawn(function()
 end)
 
 local oldCamRotation = Camera.CFrame.Rotation
+local spinAngle = 0
+
 RunService.RenderStepped:Connect(function()
     if not gui.Parent then return end
-    FOVCircle.Radius = states.aimFOV; FOVCircle.Position = UIS:GetMouseLocation(); FOVCircle.Visible = (states.visible and states.showFOV)
+    
+    FOVCircle.Radius = states.aimFOV
+    FOVCircle.Position = UIS:GetMouseLocation()
+    FOVCircle.Visible = (states.visible and states.showFOV)
+    FOVCircle.Color = states.espColor
 
-    -- MAGNET TELEPORT (BACKSTAB FIX)
-    if states.tpMagnet then
-        local t = getTarget()
-        if t and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
-            -- Calcula a posição atrás do alvo (3 studs atrás) e faz você olhar para ele
-            local targetPos = t.Parent.HumanoidRootPart.Position
-            local targetBackPos = (t.Parent.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)).Position
-            lp.Character.HumanoidRootPart.CFrame = CFrame.new(targetBackPos, targetPos)
+    -- SPIN MAGNET FIX (GRUDADO + SEMPRE DE FRENTE + MIRA NA CABEÇA)
+    if states.tpMagnet and states.isTPKeyDown then
+        local targetHead = getTarget(true)
+        if targetHead then
+            pcall(function()
+                local char = lp.Character
+                local hrp = char and char:FindFirstChild("HumanoidRootPart")
+                local targetHRP = targetHead.Parent:FindFirstChild("HumanoidRootPart")
+                
+                if hrp and targetHRP then
+                    spinAngle = spinAngle + states.spinSpeed
+                    
+                    -- Calcula a posição ao redor do inimigo (3 studs de distância)
+                    local angleRad = math.rad(spinAngle)
+                    local offset = Vector3.new(math.cos(angleRad) * 3, 1.5, math.sin(angleRad) * 3)
+                    local finalPos = targetHRP.Position + offset
+                    
+                    -- Faz o seu personagem sempre olhar para a cabeça do inimigo
+                    hrp.CFrame = CFrame.lookAt(finalPos, targetHead.Position)
+                    hrp.Velocity = Vector3.zero
+                    
+                    -- Trava a Câmera na cabeça do inimigo enquanto teleporta
+                    Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetHead.Position)
+                end
+            end)
+        end
+    else
+        spinAngle = 0
+    end
+
+    -- AIM ASSIST
+    if states.aim then
+        local targetHead = getTarget(false)
+        if targetHead then
+            Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, targetHead.Position), states.aimStrength) 
         end
     end
 
     -- NO RECOIL
-    if states.norecoil then
-        local currentRotation = Camera.CFrame.Rotation
-        if (currentRotation.LookVector - oldCamRotation.LookVector).Magnitude > 0.01 then
-             if UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
-                 Camera.CFrame = CFrame.new(Camera.CFrame.Position) * oldCamRotation
-             end
-        end
+    if states.norecoil and UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
+        Camera.CFrame = CFrame.new(Camera.CFrame.Position) * oldCamRotation
     end
     oldCamRotation = Camera.CFrame.Rotation
 
-    -- AIM BOT
-    if states.aim then
-        local t = getTarget()
-        if t then 
-            Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, t.Position), states.aimStrength) 
-        end
-    end
-
-    -- TRIGGER
+    -- TRIGGER BOT
     if states.trigger and not states.triggerDebounce then
         local mt = lp:GetMouse().Target
         if mt and mt.Parent and mt.Parent:FindFirstChild("Humanoid") then
@@ -274,10 +342,4 @@ RunService.RenderStepped:Connect(function()
             end
         end
     end
-end)
-
-UIS.InputBegan:Connect(function(i, g) 
-    if not g and i.KeyCode == Enum.KeyCode.RightShift then 
-        states.visible = not states.visible; main.Visible = states.visible
-    end 
 end)
