@@ -16,6 +16,17 @@ local WorldToViewportPoint = Camera.WorldToViewportPoint
 local GetPlayers = Players.GetPlayers
 local RaycastParamsNew = RaycastParams.new
 
+-- ================= ANTI-DETECÇÃO (PROTEÇÃO DE METATABLE) =================
+local raw_name = "DashHubBeta"
+if getgenv and hookmetamethod then
+    local old; old = hookmetamethod(game, "__index", function(self, key)
+        if not checkcaller() and (key == "Name" or key == "Parent") and self == pGui:FindFirstChild(raw_name) then
+            return nil
+        end
+        return old(self, key)
+    end)
+end
+
 -- Limpa versões duplicadas para não bugar
 if pGui:FindFirstChild("DashHubBeta") then pGui.DashHubBeta:Destroy() end
 
@@ -28,7 +39,9 @@ local states = {
     espColor = Color3.fromRGB(0, 170, 255),
     lang = "PT", triggerDebounce = false,
     -- ADICIONADOS:
-    fly = false, infAmmo = false, instantReload = false, flySpeed = 50
+    fly = false, infAmmo = false, instantReload = false, flySpeed = 50,
+    noclip = false, 
+    hideKills = false -- ADICIONADO: Ocultar Status de Kills
 }
 
 -- FIX: Configurações do Círculo
@@ -83,7 +96,7 @@ end
 
 -- ================= GUI BASE (CORREÇÃO DE ABERTURA) =================
 local gui = Instance.new("ScreenGui")
-gui.Name = "DashHubBeta"
+gui.Name = raw_name
 gui.ResetOnSpawn = false
 gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 gui.Parent = pGui 
@@ -116,8 +129,9 @@ local frames = {}
 local tabButtons = {}
 
 local function createTab(name)
-    local f = Instance.new("Frame", container)
+    local f = Instance.new("ScrollingFrame", container)
     f.Size = UDim2.new(1, 0, 1, 0); f.BackgroundTransparency = 1; f.Visible = (name == "HOME")
+    f.CanvasSize = UDim2.new(0,0,2,0); f.ScrollBarThickness = 2
     frames[name] = f
     return f
 end
@@ -135,7 +149,7 @@ local function createTabBtn(id, name, y)
     tabButtons[id] = btn
 end
 
-createTabBtn("HOME", "🏠 HOME", 90); createTabBtn("AIM BOT", "🎯 AIM BOT", 140); createTabBtn("ESP", "👁️ ESP", 190); createTabBtn("CONFIG", "⚙️ CONFIG", 240)
+createTabBtn("HOME", "🏠 INÍCIO", 90); createTabBtn("AIM BOT", "🎯 MIRA", 140); createTabBtn("ESP", "👁️ VISUAL", 190); createTabBtn("CONFIG", "⚙️ CONFIG", 240)
 
 local info = Instance.new("TextLabel", homeF)
 info.Size = UDim2.new(1, 0, 1, 0); info.BackgroundColor3 = Color3.fromRGB(25, 25, 40); info.TextColor3 = Color3.new(1,1,1); info.Font = Enum.Font.GothamBold; info.TextSize = 14; info.RichText = true; info.TextYAlignment = Enum.TextYAlignment.Top; Instance.new("UICorner", info)
@@ -147,18 +161,23 @@ task.spawn(function()
         pcall(function()
             local ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
             local fps = math.floor(Stats.Workspace.Heartbeat:GetValue())
+            
+            -- LÓGICA DE OCULTAR NICK E KILLS
+            local displayUser = states.hideKills and "[PROTECTED]" or "[HIDDEN]"
+            local displayStatus = states.hideKills and "STATUS: OFFLINE/HIDDEN" or "ACCOUNT AGE: " .. lp.AccountAge .. " days"
+
             info.Text = string.format([[
 <font size="30" color="#00AAFF">DASH HUB</font>
 <br/><br/>
 <b>👤 %s:</b> %s
-<b>🆔 ID:</b> %d
-<b>📅 ACCOUNT AGE:</b> %d days
+<b>🆔 ID:</b> [PROTECTED]
+<b>📅 %s</b>
 <br/>
 <font color="#00FF00">-- SERVER STATUS --</font>
 <b>📊 FPS:</b> %d | <b>📡 PING:</b> %d ms
 <br/><br/>
 <font color="#FFAA00">%s</font>
-]], l.user, lp.Name, lp.UserId, lp.AccountAge, fps, ping, l.help)
+]], l.user, displayUser, displayStatus, fps, ping, l.help)
             tabButtons.HOME.Text = l.home; tabButtons["AIM BOT"].Text = l.aim; tabButtons.ESP.Text = l.esp; tabButtons.CONFIG.Text = l.conf
         end)
     end
@@ -202,6 +221,10 @@ for i, l in ipairs({"PT", "EN", "ES", "FR", "DE"}) do
     b.MouseButton1Click:Connect(function() states.lang = l end)
 end
 
+-- ADICIONADOS NA ABA CONFIG
+createToggle("No Clip (Paredes)", 110, confF, "noclip")
+createToggle("Ocultar Kills/Nick", 155, confF, "hideKills") -- NOVA OPÇÃO
+
 local fpsBtn = Instance.new("TextButton", confF)
 fpsBtn.Size = UDim2.new(1, 0, 0, 50); fpsBtn.Position = UDim2.fromOffset(0, 50); fpsBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100); fpsBtn.Text = "🚀 FPS BOOSTER (CLEAN MAP)"; fpsBtn.TextColor3 = Color3.new(1,1,1); fpsBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", fpsBtn)
 fpsBtn.MouseButton1Click:Connect(function()
@@ -218,10 +241,12 @@ createToggle("Soft Aim Assist", 0, aimF, "aim")
 createToggle("Trigger Bot", 45, aimF, "trigger")
 createToggle("No Recoil (Universal)", 90, aimF, "norecoil")
 
--- ADICIONADOS NA ABA AIM BOT:
+-- FLY E SPEED ADICIONADOS AQUI:
 createToggle("Fly (W,S,A,D)", 345, aimF, "fly")
-createToggle("Infinite Ammo", 390, aimF, "infAmmo")
-createToggle("Instant Reload", 435, aimF, "instantReload")
+createSlider("FLY SPEED", 390, states.flySpeed, 500, "flySpeed", aimF) -- SLIDER DE VOO
+
+createToggle("Infinite Ammo", 445, aimF, "infAmmo")
+createToggle("Instant Reload", 490, aimF, "instantReload")
 
 local tpBtn = Instance.new("TextButton", aimF)
 tpBtn.Size = UDim2.new(1, 0, 0, 40); tpBtn.Position = UDim2.fromOffset(0, 135); tpBtn.BackgroundColor3 = states.tpMagnet and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(150, 0, 255)
@@ -245,6 +270,17 @@ for _, c in ipairs({Color3.new(0,0.7,1), Color3.new(1,0,0), Color3.new(0,1,0), C
 end
 
 -- ================= SYSTEM LÓGICA =================
+
+-- LÓGICA NO CLIP
+RunService.Stepped:Connect(function()
+    if states.noclip and lp.Character then
+        for _, v in ipairs(lp.Character:GetDescendants()) do
+            if v:IsA("BasePart") then
+                v.CanCollide = false
+            end
+        end
+    end
+end)
 
 UIS.InputBegan:Connect(function(i, g) 
     if not g then
@@ -310,7 +346,6 @@ task.spawn(function()
     end
 end)
 
-local oldCamRotation = Camera.CFrame.Rotation
 local spinAngle = 0
 
 RunService.RenderStepped:Connect(function()
@@ -352,11 +387,14 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- NO RECOIL
+    -- NO RECOIL FIX
     if states.norecoil and UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
-        Camera.CFrame = CFrame.new(Camera.CFrame.Position) * oldCamRotation
+        local rot = Camera.CFrame.Rotation
+        task.spawn(function()
+            RunService.RenderStepped:Wait()
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position) * rot
+        end)
     end
-    oldCamRotation = Camera.CFrame.Rotation
 
     -- TRIGGER BOT
     if states.trigger and not states.triggerDebounce then
