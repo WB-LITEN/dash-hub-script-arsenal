@@ -16,35 +16,43 @@ local WorldToViewportPoint = Camera.WorldToViewportPoint
 local GetPlayers = Players.GetPlayers
 local RaycastParamsNew = RaycastParams.new
 
--- ================= ANTI-DETECÇÃO (PROTEÇÃO DE METATABLE) =================
-local raw_name = "DashHubBeta"
-if getgenv and hookmetamethod then
-    local old; old = hookmetamethod(game, "__index", function(self, key)
-        if not checkcaller() and (key == "Name" or key == "Parent") and self == pGui:FindFirstChild(raw_name) then
-            return nil
-        end
-        return old(self, key)
-    end)
-end
-
--- Limpa versões duplicadas para não bugar
-if pGui:FindFirstChild("DashHubBeta") then pGui.DashHubBeta:Destroy() end
-
 -- ================= CONFIGS & LANGS =================
 local states = { 
     showFOV = false, wallhack = false, aim = false, trigger = false, visible = true,
     norecoil = false, tpMagnet = false, 
     isTPKeyDown = false, spinSpeed = 30,
     aimStrength = 0.15, aimFOV = 150,
-    espColor = Color3.fromRGB(0, 170, 255),
+    espColor = Color3.fromRGB(0, 100, 255), -- AZUL DASH
     lang = "PT", triggerDebounce = false,
-    -- ADICIONADOS:
     fly = false, infAmmo = false, instantReload = false, flySpeed = 50,
     noclip = false, 
-    hideKills = false -- ADICIONADO: Ocultar Status de Kills
+    hideKills = false,
+    identitySpoof = false 
 }
 
--- FIX: Configurações do Círculo
+-- ================= ANTI-DETECÇÃO (PROTEÇÃO DE METATABLE & SPOOF) =================
+local raw_name = "DashHubBeta"
+if getgenv and hookmetamethod then
+    local old; old = hookmetamethod(game, "__index", function(self, key)
+        if not checkcaller() then
+            if (key == "Name" or key == "Parent") and self == pGui:FindFirstChild(raw_name) then
+                return nil
+            end
+            if states.identitySpoof and self == lp then
+                if key == "Name" or key == "DisplayName" or key == "CharacterAppearanceId" then 
+                    return "Player" 
+                end
+                if key == "UserId" then 
+                    return 1 
+                end
+            end
+        end
+        return old(self, key)
+    end)
+end
+
+if pGui:FindFirstChild("DashHubBeta") then pGui.DashHubBeta:Destroy() end
+
 local FOVCircle = Drawing.new("Circle")
 FOVCircle.Thickness = 2 
 FOVCircle.Color = Color3.new(1, 1, 1)
@@ -72,6 +80,7 @@ local function isVisible(part)
     return result == nil
 end
 
+-- MANTIDO PARA O AIMBOT (PRECISA DO MOUSE)
 local function getTarget(ignoreWalls)
     local target, shortestDist = nil, states.aimFOV
     local mousePos = UIS:GetMouseLocation()
@@ -94,7 +103,27 @@ local function getTarget(ignoreWalls)
     return target
 end
 
--- ================= GUI BASE (CORREÇÃO DE ABERTURA) =================
+-- NOVA FUNÇÃO PARA O TELEPORT (NÃO PRECISA DO MOUSE)
+local function getClosestEnemyRoot()
+    local target, shortestDist = nil, math.huge
+    local myHRP = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
+    if not myHRP then return nil end
+
+    for _, p in ipairs(GetPlayers(Players)) do
+        if p ~= lp and p.Team ~= lp.Team and p.Character then
+            local hrp = p.Character:FindFirstChild("HumanoidRootPart")
+            if hrp then
+                local dist = (myHRP.Position - hrp.Position).Magnitude
+                if dist < shortestDist then
+                    target = hrp; shortestDist = dist
+                end
+            end
+        end
+    end
+    return target
+end
+
+-- ================= GUI BASE (DASH HUB WHITE & BLUE) =================
 local gui = Instance.new("ScreenGui")
 gui.Name = raw_name
 gui.ResetOnSpawn = false
@@ -104,14 +133,14 @@ gui.Parent = pGui
 local main = Instance.new("Frame", gui)
 main.Size = UDim2.fromOffset(480, 580)
 main.Position = UDim2.new(0.5, -240, 0.5, -290)
-main.BackgroundColor3 = Color3.fromRGB(15, 15, 22)
+main.BackgroundColor3 = Color3.fromRGB(255, 255, 255) 
 main.Active = true
 main.Draggable = true
 main.Visible = true 
 Instance.new("UICorner", main)
 
 local stroke = Instance.new("UIStroke", main)
-stroke.Thickness = 3; stroke.Color = Color3.fromRGB(0, 170, 255)
+stroke.Thickness = 3; stroke.Color = Color3.fromRGB(0, 100, 255) 
 
 local closeBtn = Instance.new("TextButton", main)
 closeBtn.Size = UDim2.fromOffset(30, 30); closeBtn.Position = UDim2.new(1, -40, 0, 10)
@@ -120,7 +149,7 @@ Instance.new("UICorner", closeBtn)
 closeBtn.MouseButton1Click:Connect(function() FOVCircle:Remove(); gui:Destroy() end)
 
 local sidebar = Instance.new("Frame", main)
-sidebar.Size = UDim2.new(0, 140, 1, 0); sidebar.BackgroundColor3 = Color3.fromRGB(10, 10, 15); Instance.new("UICorner", sidebar)
+sidebar.Size = UDim2.new(0, 140, 1, 0); sidebar.BackgroundColor3 = Color3.fromRGB(240, 240, 245); Instance.new("UICorner", sidebar)
 
 local container = Instance.new("Frame", main)
 container.Position = UDim2.new(0, 150, 0, 50); container.Size = UDim2.new(1, -160, 1, -60); container.BackgroundTransparency = 1
@@ -141,8 +170,10 @@ local homeF = createTab("HOME"); local aimF = createTab("AIM BOT"); local espF =
 local function createTabBtn(id, name, y)
     local btn = Instance.new("TextButton", sidebar)
     btn.Size = UDim2.new(1, -15, 0, 45); btn.Position = UDim2.fromOffset(7, y)
-    btn.BackgroundColor3 = Color3.fromRGB(25, 25, 35); btn.Text = name; btn.TextColor3 = Color3.new(1,1,1); btn.Font = Enum.Font.GothamBold; btn.TextSize = 11
+    btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255); btn.Text = name; btn.TextColor3 = Color3.fromRGB(0, 100, 255); btn.Font = Enum.Font.GothamBold; btn.TextSize = 11
     Instance.new("UICorner", btn)
+    local bStroke = Instance.new("UIStroke", btn)
+    bStroke.Color = Color3.fromRGB(0, 100, 255); bStroke.Thickness = 1
     btn.MouseButton1Click:Connect(function() 
         for k, v in pairs(frames) do v.Visible = (k == id) end 
     end)
@@ -152,7 +183,7 @@ end
 createTabBtn("HOME", "🏠 INÍCIO", 90); createTabBtn("AIM BOT", "🎯 MIRA", 140); createTabBtn("ESP", "👁️ VISUAL", 190); createTabBtn("CONFIG", "⚙️ CONFIG", 240)
 
 local info = Instance.new("TextLabel", homeF)
-info.Size = UDim2.new(1, 0, 1, 0); info.BackgroundColor3 = Color3.fromRGB(25, 25, 40); info.TextColor3 = Color3.new(1,1,1); info.Font = Enum.Font.GothamBold; info.TextSize = 14; info.RichText = true; info.TextYAlignment = Enum.TextYAlignment.Top; Instance.new("UICorner", info)
+info.Size = UDim2.new(1, 0, 1, 0); info.BackgroundColor3 = Color3.fromRGB(255, 255, 255); info.TextColor3 = Color3.fromRGB(30, 30, 30); info.Font = Enum.Font.GothamBold; info.TextSize = 14; info.RichText = true; info.TextYAlignment = Enum.TextYAlignment.Top; Instance.new("UICorner", info)
 
 task.spawn(function()
     while task.wait(1) do
@@ -161,46 +192,44 @@ task.spawn(function()
         pcall(function()
             local ping = math.floor(Stats.Network.ServerStatsItem["Data Ping"]:GetValue())
             local fps = math.floor(Stats.Workspace.Heartbeat:GetValue())
-            
-            -- LÓGICA DE OCULTAR NICK E KILLS
-            local displayUser = states.hideKills and "[PROTECTED]" or "[HIDDEN]"
-            local displayStatus = states.hideKills and "STATUS: OFFLINE/HIDDEN" or "ACCOUNT AGE: " .. lp.AccountAge .. " days"
-
+            local displayUser = states.identitySpoof and "Player" or (states.hideKills and "[PROTECTED]" or lp.Name)
+            local displayStatus = states.hideKills and "STATUS: HIDDEN" or "ACCOUNT AGE: " .. lp.AccountAge .. " days"
             info.Text = string.format([[
 <font size="30" color="#00AAFF">DASH HUB</font>
 <br/><br/>
 <b>👤 %s:</b> %s
-<b>🆔 ID:</b> [PROTECTED]
+<b>🆔 ID:</b> %s
 <b>📅 %s</b>
 <br/>
 <font color="#00FF00">-- SERVER STATUS --</font>
 <b>📊 FPS:</b> %d | <b>📡 PING:</b> %d ms
 <br/><br/>
-<font color="#FFAA00">%s</font>
-]], l.user, displayUser, displayStatus, fps, ping, l.help)
+<font color="#0064FF">%s</font>
+]], l.user, displayUser, (states.identitySpoof and "1" or "[PROTECTED]"), displayStatus, fps, ping, l.help)
             tabButtons.HOME.Text = l.home; tabButtons["AIM BOT"].Text = l.aim; tabButtons.ESP.Text = l.esp; tabButtons.CONFIG.Text = l.conf
         end)
     end
 end)
 
--- ================= TOOLS (TOGGLES & SLIDERS) =================
+-- ================= TOOLS =================
 local function createToggle(txt, y, parent, stateKey)
     local btn = Instance.new("TextButton", parent)
     btn.Size = UDim2.new(1, 0, 0, 40); btn.Position = UDim2.fromOffset(0, y)
-    btn.BackgroundColor3 = states[stateKey] and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(30, 30, 45)
-    btn.Text = (states[stateKey] and "🔵 " or "⚪ ") .. txt; btn.TextColor3 = Color3.new(1,1,1); btn.Font = Enum.Font.GothamBold; btn.TextSize = 12; Instance.new("UICorner", btn)
+    btn.BackgroundColor3 = states[stateKey] and Color3.fromRGB(0, 100, 255) or Color3.fromRGB(245, 245, 250)
+    btn.Text = (states[stateKey] and "🔵 " or "⚪ ") .. txt; btn.TextColor3 = states[stateKey] and Color3.new(1,1,1) or Color3.fromRGB(0, 100, 255); btn.Font = Enum.Font.GothamBold; btn.TextSize = 12; Instance.new("UICorner", btn)
     btn.MouseButton1Click:Connect(function()
         states[stateKey] = not states[stateKey]
         btn.Text = (states[stateKey] and "🔵 " or "⚪ ") .. txt
-        btn.BackgroundColor3 = states[stateKey] and Color3.fromRGB(0, 170, 255) or Color3.fromRGB(30, 30, 45)
+        btn.BackgroundColor3 = states[stateKey] and Color3.fromRGB(0, 100, 255) or Color3.fromRGB(245, 245, 250)
+        btn.TextColor3 = states[stateKey] and Color3.new(1,1,1) or Color3.fromRGB(0, 100, 255)
     end)
 end
 
 local function createSlider(txt, y, start, max, key, parent)
     local sFrame = Instance.new("Frame", parent); sFrame.Position = UDim2.fromOffset(0, y); sFrame.Size = UDim2.new(1,0,0,50); sFrame.BackgroundTransparency = 1
-    local sBar = Instance.new("Frame", sFrame); sBar.Size = UDim2.new(0.9,0,0,5); sBar.Position = UDim2.new(0.05,0,0.7,0); sBar.BackgroundColor3 = Color3.new(0.2,0.2,0.3)
-    local sDot = Instance.new("TextButton", sBar); sDot.Size = UDim2.fromOffset(16,16); sDot.Position = UDim2.new(start/max, -8, 0.5, -8); sDot.Text = ""; sDot.BackgroundColor3 = Color3.fromRGB(0, 170, 255); Instance.new("UICorner", sDot)
-    local sLab = Instance.new("TextLabel", sFrame); sLab.Size = UDim2.new(1,0,0,20); sLab.Text = "⚡ " .. txt .. ": " .. start; sLab.TextColor3 = Color3.new(1,1,1); sLab.BackgroundTransparency = 1; sLab.Font = Enum.Font.GothamBold; sLab.TextSize = 12
+    local sBar = Instance.new("Frame", sFrame); sBar.Size = UDim2.new(0.9,0,0,5); sBar.Position = UDim2.new(0.05,0,0.7,0); sBar.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
+    local sDot = Instance.new("TextButton", sBar); sDot.Size = UDim2.fromOffset(16,16); sDot.Position = UDim2.new(start/max, -8, 0.5, -8); sDot.Text = ""; sDot.BackgroundColor3 = Color3.fromRGB(0, 100, 255); Instance.new("UICorner", sDot)
+    local sLab = Instance.new("TextLabel", sFrame); sLab.Size = UDim2.new(1,0,0,20); sLab.Text = "⚡ " .. txt .. ": " .. start; sLab.TextColor3 = Color3.fromRGB(30,30,30); sLab.BackgroundTransparency = 1; sLab.Font = Enum.Font.GothamBold; sLab.TextSize = 12
     sDot.MouseButton1Down:Connect(function()
         local move; move = UIS.InputChanged:Connect(function(input)
             if input.UserInputType == Enum.UserInputType.MouseMovement then
@@ -217,13 +246,13 @@ end
 local flags = {PT="🇧🇷 PT", EN="🇺🇸 EN", ES="🇪🇸 ES", FR="🇫🇷 FR", DE="🇩🇪 DE"}
 for i, l in ipairs({"PT", "EN", "ES", "FR", "DE"}) do
     local b = Instance.new("TextButton", confF); b.Size = UDim2.new(0.18, 0, 0, 35); b.Position = UDim2.new((i-1)*0.2, 0, 0, 0)
-    b.Text = flags[l]; b.BackgroundColor3 = Color3.fromRGB(40,40,55); b.TextColor3 = Color3.new(1,1,1); b.Font = Enum.Font.GothamBold; b.TextSize = 10; Instance.new("UICorner", b)
+    b.Text = flags[l]; b.BackgroundColor3 = Color3.fromRGB(240,240,245); b.TextColor3 = Color3.fromRGB(0,100,255); b.Font = Enum.Font.GothamBold; b.TextSize = 10; Instance.new("UICorner", b)
     b.MouseButton1Click:Connect(function() states.lang = l end)
 end
 
--- ADICIONADOS NA ABA CONFIG
-createToggle("No Clip (Paredes)", 110, confF, "noclip")
-createToggle("Ocultar Kills/Nick", 155, confF, "hideKills") -- NOVA OPÇÃO
+createToggle("Identity Mask (Spoof)", 110, confF, "identitySpoof")
+createToggle("No Clip (Paredes)", 155, confF, "noclip")
+createToggle("Ocultar Kills/Nick HUD", 200, confF, "hideKills")
 
 local fpsBtn = Instance.new("TextButton", confF)
 fpsBtn.Size = UDim2.new(1, 0, 0, 50); fpsBtn.Position = UDim2.fromOffset(0, 50); fpsBtn.BackgroundColor3 = Color3.fromRGB(0, 200, 100); fpsBtn.Text = "🚀 FPS BOOSTER (CLEAN MAP)"; fpsBtn.TextColor3 = Color3.new(1,1,1); fpsBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", fpsBtn)
@@ -240,20 +269,17 @@ end)
 createToggle("Soft Aim Assist", 0, aimF, "aim")
 createToggle("Trigger Bot", 45, aimF, "trigger")
 createToggle("No Recoil (Universal)", 90, aimF, "norecoil")
-
--- FLY E SPEED ADICIONADOS AQUI:
 createToggle("Fly (W,S,A,D)", 345, aimF, "fly")
-createSlider("FLY SPEED", 390, states.flySpeed, 500, "flySpeed", aimF) -- SLIDER DE VOO
-
+createSlider("FLY SPEED", 390, states.flySpeed, 500, "flySpeed", aimF)
 createToggle("Infinite Ammo", 445, aimF, "infAmmo")
 createToggle("Instant Reload", 490, aimF, "instantReload")
 
 local tpBtn = Instance.new("TextButton", aimF)
-tpBtn.Size = UDim2.new(1, 0, 0, 40); tpBtn.Position = UDim2.fromOffset(0, 135); tpBtn.BackgroundColor3 = states.tpMagnet and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(150, 0, 255)
+tpBtn.Size = UDim2.new(1, 0, 0, 40); tpBtn.Position = UDim2.fromOffset(0, 135); tpBtn.BackgroundColor3 = states.tpMagnet and Color3.fromRGB(0, 200, 255) or Color3.fromRGB(0, 100, 255)
 tpBtn.Text = "🧲 SPIN MAGNET (HOLD E)"; tpBtn.TextColor3 = Color3.new(1,1,1); tpBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", tpBtn)
 tpBtn.MouseButton1Click:Connect(function()
     states.tpMagnet = not states.tpMagnet
-    tpBtn.BackgroundColor3 = states.tpMagnet and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(150, 0, 255)
+    tpBtn.BackgroundColor3 = states.tpMagnet and Color3.fromRGB(0, 200, 255) or Color3.fromRGB(0, 100, 255)
 end)
 
 createSlider("AIM STRENGTH", 185, states.aimStrength, 1, "aimStrength", aimF)
@@ -271,13 +297,10 @@ end
 
 -- ================= SYSTEM LÓGICA =================
 
--- LÓGICA NO CLIP
 RunService.Stepped:Connect(function()
     if states.noclip and lp.Character then
         for _, v in ipairs(lp.Character:GetDescendants()) do
-            if v:IsA("BasePart") then
-                v.CanCollide = false
-            end
+            if v:IsA("BasePart") then v.CanCollide = false end
         end
     end
 end)
@@ -317,7 +340,7 @@ task.spawn(function()
     end
 end)
 
--- LÓGICA EXTRA (FLY, AMMO, RELOAD)
+-- FLY & AMMO
 RunService.Stepped:Connect(function()
     if states.fly and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
         local hrp = lp.Character.HumanoidRootPart
@@ -356,30 +379,30 @@ RunService.RenderStepped:Connect(function()
     FOVCircle.Visible = (states.visible and states.showFOV)
     FOVCircle.Color = states.espColor
 
-    -- SPIN MAGNET FIX
+    -- CORREÇÃO: TELEPORT SEM PRECISAR MIRAR
     if states.tpMagnet and states.isTPKeyDown then
-        local targetHead = getTarget(true)
-        if targetHead then
-            pcall(function()
-                local char = lp.Character
-                local hrp = char and char:FindFirstChild("HumanoidRootPart")
-                local targetHRP = targetHead.Parent:FindFirstChild("HumanoidRootPart")
-                if hrp and targetHRP then
-                    spinAngle = spinAngle + states.spinSpeed
-                    local angleRad = math.rad(spinAngle)
-                    local offset = Vector3.new(math.cos(angleRad) * 3, 1.5, math.sin(angleRad) * 3)
-                    local finalPos = targetHRP.Position + offset
-                    hrp.CFrame = CFrame.lookAt(finalPos, targetHead.Position)
-                    hrp.Velocity = Vector3.zero
-                    Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetHead.Position)
-                end
-            end)
+        local targetHRP = getClosestEnemyRoot() -- Busca automática por distância
+        if targetHRP and targetHRP.Parent then
+            local char = lp.Character
+            local hrp = char and char:FindFirstChild("HumanoidRootPart")
+            
+            if hrp then
+                spinAngle = spinAngle + states.spinSpeed
+                local angleRad = math.rad(spinAngle)
+                -- 4 studs de distância e 1.5 para cima
+                local offset = Vector3.new(math.cos(angleRad) * 4, 1.5, math.sin(angleRad) * 4)
+                local finalPos = targetHRP.Position + offset
+                
+                hrp.CFrame = CFrame.lookAt(finalPos, targetHRP.Position)
+                hrp.Velocity = Vector3.zero
+                Camera.CFrame = CFrame.lookAt(Camera.CFrame.Position, targetHRP.Position)
+            end
         end
     else
         spinAngle = 0
     end
 
-    -- AIM ASSIST
+    -- AIMBOT (MANTIDO COM FOV/MIRA)
     if states.aim then
         local targetHead = getTarget(false)
         if targetHead then
@@ -387,7 +410,7 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- NO RECOIL FIX
+    -- NO RECOIL & TRIGGER
     if states.norecoil and UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
         local rot = Camera.CFrame.Rotation
         task.spawn(function()
@@ -396,7 +419,6 @@ RunService.RenderStepped:Connect(function()
         end)
     end
 
-    -- TRIGGER BOT
     if states.trigger and not states.triggerDebounce then
         local mt = lp:GetMouse().Target
         if mt and mt.Parent and mt.Parent:FindFirstChild("Humanoid") then
