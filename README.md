@@ -1,4 +1,5 @@
--- DASH HUB BETA V18.2 (RE-RESTORED + FULL FIX)
+-- DASH HUB BETA V18.3 (CLEAN VERSION - NO RECOIL REMOVED)
+-- ATUALIZADO: FIX TELEPORT & REMOÇÃO DE FUNÇÕES
 -- SHORTCUT: RIGHT SHIFT | [X] TO CLOSE
 
 local Players = game:GetService("Players")
@@ -19,12 +20,12 @@ local RaycastParamsNew = RaycastParams.new
 -- ================= CONFIGS & LANGS =================
 local states = { 
     showFOV = false, wallhack = false, aim = false, trigger = false, visible = true,
-    norecoil = false, tpMagnet = false, 
+    tpMagnet = false, 
     isTPKeyDown = false, spinSpeed = 30,
     aimStrength = 0.15, aimFOV = 150,
-    espColor = Color3.fromRGB(0, 100, 255), -- AZUL DASH
+    espColor = Color3.fromRGB(0, 255, 255), -- COR PADRÃO: AZUL CIANO
     lang = "PT", triggerDebounce = false,
-    fly = false, infAmmo = false, instantReload = false, flySpeed = 50,
+    fly = false, flySpeed = 50,
     noclip = false, 
     hideKills = false,
     identitySpoof = false 
@@ -55,7 +56,7 @@ if pGui:FindFirstChild("DashHubBeta") then pGui.DashHubBeta:Destroy() end
 
 local FOVCircle = Drawing.new("Circle")
 FOVCircle.Thickness = 2 
-FOVCircle.Color = Color3.new(1, 1, 1)
+FOVCircle.Color = Color3.new(0, 1, 1) -- CIANO
 FOVCircle.Transparency = 1 
 FOVCircle.Visible = false
 FOVCircle.Filled = false
@@ -87,7 +88,9 @@ local function getTarget(ignoreWalls)
     for _, p in ipairs(GetPlayers(Players)) do
         if p ~= lp and p.Team ~= lp.Team and p.Character then
             local head = p.Character:FindFirstChild("Head")
-            if head then
+            local hum = p.Character:FindFirstChild("Humanoid")
+            -- VERIFICAÇÃO DE VIDA ADICIONADA AQUI TAMBÉM
+            if head and hum and hum.Health > 0 then
                 local pos, on = WorldToViewportPoint(Camera, head.Position)
                 if on or ignoreWalls then
                     local mag = (Vector2.new(pos.X, pos.Y) - mousePos).Magnitude
@@ -103,7 +106,7 @@ local function getTarget(ignoreWalls)
     return target
 end
 
--- NOVA FUNÇÃO PARA O TELEPORT (NÃO PRECISA DO MOUSE)
+-- NOVA FUNÇÃO PARA O TELEPORT (CORRIGIDA)
 local function getClosestEnemyRoot()
     local target, shortestDist = nil, math.huge
     local myHRP = lp.Character and lp.Character:FindFirstChild("HumanoidRootPart")
@@ -112,7 +115,9 @@ local function getClosestEnemyRoot()
     for _, p in ipairs(GetPlayers(Players)) do
         if p ~= lp and p.Team ~= lp.Team and p.Character then
             local hrp = p.Character:FindFirstChild("HumanoidRootPart")
-            if hrp then
+            local hum = p.Character:FindFirstChild("Humanoid")
+            -- CORREÇÃO: SÓ PEGA INIMIGOS VIVOS (Health > 0)
+            if hrp and hum and hum.Health > 0 then
                 local dist = (myHRP.Position - hrp.Position).Magnitude
                 if dist < shortestDist then
                     target = hrp; shortestDist = dist
@@ -123,7 +128,7 @@ local function getClosestEnemyRoot()
     return target
 end
 
--- ================= GUI BASE (DASH HUB WHITE & BLUE) =================
+-- ================= GUI BASE (DASH HUB CYAN) =================
 local gui = Instance.new("ScreenGui")
 gui.Name = raw_name
 gui.ResetOnSpawn = false
@@ -133,14 +138,14 @@ gui.Parent = pGui
 local main = Instance.new("Frame", gui)
 main.Size = UDim2.fromOffset(480, 580)
 main.Position = UDim2.new(0.5, -240, 0.5, -290)
-main.BackgroundColor3 = Color3.fromRGB(255, 255, 255) 
+main.BackgroundColor3 = Color3.fromRGB(0, 255, 255) -- FUNDO AZUL CIANO
 main.Active = true
 main.Draggable = true
 main.Visible = true 
 Instance.new("UICorner", main)
 
 local stroke = Instance.new("UIStroke", main)
-stroke.Thickness = 3; stroke.Color = Color3.fromRGB(0, 100, 255) 
+stroke.Thickness = 3; stroke.Color = Color3.fromRGB(255, 255, 255) -- BORDA BRANCA
 
 local closeBtn = Instance.new("TextButton", main)
 closeBtn.Size = UDim2.fromOffset(30, 30); closeBtn.Position = UDim2.new(1, -40, 0, 10)
@@ -149,7 +154,7 @@ Instance.new("UICorner", closeBtn)
 closeBtn.MouseButton1Click:Connect(function() FOVCircle:Remove(); gui:Destroy() end)
 
 local sidebar = Instance.new("Frame", main)
-sidebar.Size = UDim2.new(0, 140, 1, 0); sidebar.BackgroundColor3 = Color3.fromRGB(240, 240, 245); Instance.new("UICorner", sidebar)
+sidebar.Size = UDim2.new(0, 140, 1, 0); sidebar.BackgroundColor3 = Color3.fromRGB(220, 255, 255); Instance.new("UICorner", sidebar)
 
 local container = Instance.new("Frame", main)
 container.Position = UDim2.new(0, 150, 0, 50); container.Size = UDim2.new(1, -160, 1, -60); container.BackgroundTransparency = 1
@@ -170,10 +175,10 @@ local homeF = createTab("HOME"); local aimF = createTab("AIM BOT"); local espF =
 local function createTabBtn(id, name, y)
     local btn = Instance.new("TextButton", sidebar)
     btn.Size = UDim2.new(1, -15, 0, 45); btn.Position = UDim2.fromOffset(7, y)
-    btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255); btn.Text = name; btn.TextColor3 = Color3.fromRGB(0, 100, 255); btn.Font = Enum.Font.GothamBold; btn.TextSize = 11
+    btn.BackgroundColor3 = Color3.fromRGB(255, 255, 255); btn.Text = name; btn.TextColor3 = Color3.fromRGB(0, 150, 150); btn.Font = Enum.Font.GothamBold; btn.TextSize = 11
     Instance.new("UICorner", btn)
     local bStroke = Instance.new("UIStroke", btn)
-    bStroke.Color = Color3.fromRGB(0, 100, 255); bStroke.Thickness = 1
+    bStroke.Color = Color3.fromRGB(0, 200, 200); bStroke.Thickness = 1
     btn.MouseButton1Click:Connect(function() 
         for k, v in pairs(frames) do v.Visible = (k == id) end 
     end)
@@ -195,16 +200,16 @@ task.spawn(function()
             local displayUser = states.identitySpoof and "Player" or (states.hideKills and "[PROTECTED]" or lp.Name)
             local displayStatus = states.hideKills and "STATUS: HIDDEN" or "ACCOUNT AGE: " .. lp.AccountAge .. " days"
             info.Text = string.format([[
-<font size="30" color="#00AAFF">DASH HUB</font>
+<font size="30" color="#00AAAA">DASH HUB</font>
 <br/><br/>
 <b>👤 %s:</b> %s
 <b>🆔 ID:</b> %s
 <b>📅 %s</b>
 <br/>
-<font color="#00FF00">-- SERVER STATUS --</font>
+<font color="#00AA00">-- SERVER STATUS --</font>
 <b>📊 FPS:</b> %d | <b>📡 PING:</b> %d ms
 <br/><br/>
-<font color="#0064FF">%s</font>
+<font color="#008888">%s</font>
 ]], l.user, displayUser, (states.identitySpoof and "1" or "[PROTECTED]"), displayStatus, fps, ping, l.help)
             tabButtons.HOME.Text = l.home; tabButtons["AIM BOT"].Text = l.aim; tabButtons.ESP.Text = l.esp; tabButtons.CONFIG.Text = l.conf
         end)
@@ -215,20 +220,20 @@ end)
 local function createToggle(txt, y, parent, stateKey)
     local btn = Instance.new("TextButton", parent)
     btn.Size = UDim2.new(1, 0, 0, 40); btn.Position = UDim2.fromOffset(0, y)
-    btn.BackgroundColor3 = states[stateKey] and Color3.fromRGB(0, 100, 255) or Color3.fromRGB(245, 245, 250)
-    btn.Text = (states[stateKey] and "🔵 " or "⚪ ") .. txt; btn.TextColor3 = states[stateKey] and Color3.new(1,1,1) or Color3.fromRGB(0, 100, 255); btn.Font = Enum.Font.GothamBold; btn.TextSize = 12; Instance.new("UICorner", btn)
+    btn.BackgroundColor3 = states[stateKey] and Color3.fromRGB(0, 255, 255) or Color3.fromRGB(245, 245, 250)
+    btn.Text = (states[stateKey] and "🔵 " or "⚪ ") .. txt; btn.TextColor3 = states[stateKey] and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(0, 150, 150); btn.Font = Enum.Font.GothamBold; btn.TextSize = 12; Instance.new("UICorner", btn)
     btn.MouseButton1Click:Connect(function()
         states[stateKey] = not states[stateKey]
         btn.Text = (states[stateKey] and "🔵 " or "⚪ ") .. txt
-        btn.BackgroundColor3 = states[stateKey] and Color3.fromRGB(0, 100, 255) or Color3.fromRGB(245, 245, 250)
-        btn.TextColor3 = states[stateKey] and Color3.new(1,1,1) or Color3.fromRGB(0, 100, 255)
+        btn.BackgroundColor3 = states[stateKey] and Color3.fromRGB(0, 255, 255) or Color3.fromRGB(245, 245, 250)
+        btn.TextColor3 = states[stateKey] and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(0, 150, 150)
     end)
 end
 
 local function createSlider(txt, y, start, max, key, parent)
     local sFrame = Instance.new("Frame", parent); sFrame.Position = UDim2.fromOffset(0, y); sFrame.Size = UDim2.new(1,0,0,50); sFrame.BackgroundTransparency = 1
     local sBar = Instance.new("Frame", sFrame); sBar.Size = UDim2.new(0.9,0,0,5); sBar.Position = UDim2.new(0.05,0,0.7,0); sBar.BackgroundColor3 = Color3.fromRGB(200, 200, 200)
-    local sDot = Instance.new("TextButton", sBar); sDot.Size = UDim2.fromOffset(16,16); sDot.Position = UDim2.new(start/max, -8, 0.5, -8); sDot.Text = ""; sDot.BackgroundColor3 = Color3.fromRGB(0, 100, 255); Instance.new("UICorner", sDot)
+    local sDot = Instance.new("TextButton", sBar); sDot.Size = UDim2.fromOffset(16,16); sDot.Position = UDim2.new(start/max, -8, 0.5, -8); sDot.Text = ""; sDot.BackgroundColor3 = Color3.fromRGB(0, 255, 255); Instance.new("UICorner", sDot)
     local sLab = Instance.new("TextLabel", sFrame); sLab.Size = UDim2.new(1,0,0,20); sLab.Text = "⚡ " .. txt .. ": " .. start; sLab.TextColor3 = Color3.fromRGB(30,30,30); sLab.BackgroundTransparency = 1; sLab.Font = Enum.Font.GothamBold; sLab.TextSize = 12
     sDot.MouseButton1Down:Connect(function()
         local move; move = UIS.InputChanged:Connect(function(input)
@@ -246,7 +251,7 @@ end
 local flags = {PT="🇧🇷 PT", EN="🇺🇸 EN", ES="🇪🇸 ES", FR="🇫🇷 FR", DE="🇩🇪 DE"}
 for i, l in ipairs({"PT", "EN", "ES", "FR", "DE"}) do
     local b = Instance.new("TextButton", confF); b.Size = UDim2.new(0.18, 0, 0, 35); b.Position = UDim2.new((i-1)*0.2, 0, 0, 0)
-    b.Text = flags[l]; b.BackgroundColor3 = Color3.fromRGB(240,240,245); b.TextColor3 = Color3.fromRGB(0,100,255); b.Font = Enum.Font.GothamBold; b.TextSize = 10; Instance.new("UICorner", b)
+    b.Text = flags[l]; b.BackgroundColor3 = Color3.fromRGB(240,240,245); b.TextColor3 = Color3.fromRGB(0,150,150); b.Font = Enum.Font.GothamBold; b.TextSize = 10; Instance.new("UICorner", b)
     b.MouseButton1Click:Connect(function() states.lang = l end)
 end
 
@@ -268,11 +273,10 @@ end)
 -- ABA AIM BOT
 createToggle("Soft Aim Assist", 0, aimF, "aim")
 createToggle("Trigger Bot", 45, aimF, "trigger")
-createToggle("No Recoil (Universal)", 90, aimF, "norecoil")
+-- REMOVIDO: NO RECOIL, INF AMMO, INSTANT RELOAD
+
 createToggle("Fly (W,S,A,D)", 345, aimF, "fly")
 createSlider("FLY SPEED", 390, states.flySpeed, 500, "flySpeed", aimF)
-createToggle("Infinite Ammo", 445, aimF, "infAmmo")
-createToggle("Instant Reload", 490, aimF, "instantReload")
 
 local tpBtn = Instance.new("TextButton", aimF)
 tpBtn.Size = UDim2.new(1, 0, 0, 40); tpBtn.Position = UDim2.fromOffset(0, 135); tpBtn.BackgroundColor3 = states.tpMagnet and Color3.fromRGB(0, 200, 255) or Color3.fromRGB(0, 100, 255)
@@ -290,7 +294,7 @@ createToggle("Show FOV Circle", 300, aimF, "showFOV")
 createToggle("Enemy Wall Hack", 0, espF, "wallhack")
 local grid = Instance.new("Frame", espF); grid.Position = UDim2.fromOffset(0, 50); grid.Size = UDim2.new(1, 0, 0, 100); grid.BackgroundTransparency = 1
 Instance.new("UIGridLayout", grid).CellSize = UDim2.fromOffset(40, 40)
-for _, c in ipairs({Color3.new(0,0.7,1), Color3.new(1,0,0), Color3.new(0,1,0), Color3.new(1,1,0), Color3.new(1,1,1)}) do
+for _, c in ipairs({Color3.new(0,1,1), Color3.new(1,0,0), Color3.new(0,1,0), Color3.new(1,1,0), Color3.new(1,1,1)}) do
     local b = Instance.new("TextButton", grid); b.BackgroundColor3 = c; b.Text = ""; Instance.new("UICorner", b)
     b.MouseButton1Click:Connect(function() states.espColor = c end)
 end
@@ -340,7 +344,7 @@ task.spawn(function()
     end
 end)
 
--- FLY & AMMO
+-- FLY LOGIC
 RunService.Stepped:Connect(function()
     if states.fly and lp.Character and lp.Character:FindFirstChild("HumanoidRootPart") then
         local hrp = lp.Character.HumanoidRootPart
@@ -353,21 +357,7 @@ RunService.Stepped:Connect(function()
     end
 end)
 
-task.spawn(function()
-    while task.wait(0.1) do
-        pcall(function()
-            if states.infAmmo or states.instantReload then
-                local tool = lp.Character and lp.Character:FindFirstChildOfClass("Tool")
-                if tool then
-                    for _, v in ipairs(tool:GetDescendants()) do
-                        if states.infAmmo and (v.Name:find("Ammo") or v.Name:find("Clip")) then v.Value = 999 end
-                        if states.instantReload and (v.Name:find("Reload") or v.Name:find("Time")) then v.Value = 0 end
-                    end
-                end
-            end
-        end)
-    end
-end)
+-- REMOVIDO LOOP DE INF AMMO
 
 local spinAngle = 0
 
@@ -379,18 +369,20 @@ RunService.RenderStepped:Connect(function()
     FOVCircle.Visible = (states.visible and states.showFOV)
     FOVCircle.Color = states.espColor
 
-    -- CORREÇÃO: TELEPORT SEM PRECISAR MIRAR
+    -- TELEPORT CORRIGIDO (VALIDAÇÃO DE VIDA + CHÃO)
     if states.tpMagnet and states.isTPKeyDown then
         local targetHRP = getClosestEnemyRoot() -- Busca automática por distância
-        if targetHRP and targetHRP.Parent then
+        -- Verifica se o pai existe e se o humanoide tem vida > 0
+        if targetHRP and targetHRP.Parent and targetHRP.Parent:FindFirstChild("Humanoid") and targetHRP.Parent.Humanoid.Health > 0 then
             local char = lp.Character
             local hrp = char and char:FindFirstChild("HumanoidRootPart")
             
             if hrp then
                 spinAngle = spinAngle + states.spinSpeed
                 local angleRad = math.rad(spinAngle)
-                -- 4 studs de distância e 1.5 para cima
-                local offset = Vector3.new(math.cos(angleRad) * 4, 1.5, math.sin(angleRad) * 4)
+                -- ALTURA AJUSTADA (Y = 0) PARA FICAR NO CHÃO
+                -- Antes era 1.5 (flutuando), agora é 0 (mesmo nível do inimigo)
+                local offset = Vector3.new(math.cos(angleRad) * 4, 0, math.sin(angleRad) * 4)
                 local finalPos = targetHRP.Position + offset
                 
                 hrp.CFrame = CFrame.lookAt(finalPos, targetHRP.Position)
@@ -402,7 +394,7 @@ RunService.RenderStepped:Connect(function()
         spinAngle = 0
     end
 
-    -- AIMBOT (MANTIDO COM FOV/MIRA)
+    -- AIMBOT (MANTIDO)
     if states.aim then
         local targetHead = getTarget(false)
         if targetHead then
@@ -410,14 +402,7 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    -- NO RECOIL & TRIGGER
-    if states.norecoil and UIS:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) then
-        local rot = Camera.CFrame.Rotation
-        task.spawn(function()
-            RunService.RenderStepped:Wait()
-            Camera.CFrame = CFrame.new(Camera.CFrame.Position) * rot
-        end)
-    end
+    -- REMOVIDO NO RECOIL LOGIC
 
     if states.trigger and not states.triggerDebounce then
         local mt = lp:GetMouse().Target
